@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Board from './components/board';
@@ -18,6 +18,7 @@ export default function Game() {
   const [offlineWins, setOfflineWins] = useState(0);
   const [offlineLosses, setOfflineLosses] = useState(0);
   const [offlineGameStarted, setOfflineGameStarted] = useState(false);
+  const [offlineHistory, setOfflineHistory] = useState<{board: (string | null)[], turn: string | null}[]>([]);
 
   // Estados para lógica online
   const [deviceId, setDeviceId] = useState<string | null>(null);
@@ -39,6 +40,7 @@ export default function Game() {
     setOfflineTurn('X');
     setOfflineWinner(null);
     setOfflineGameStarted(false);
+    setOfflineHistory([]);
   }, [size]);
 
   // Registrar dispositivo online
@@ -77,43 +79,31 @@ export default function Game() {
         } catch (err) {
           setError('Error sincronizando partida.');
         }
-      }, 2000);
+      }, 1000);
       return () => clearInterval(interval);
     }
   }, [matchId, deviceId]);
 
   // Funciones offline
   const handlePlayOffline = (x: number, y: number) => {
-    if (!offlineGameStarted || offlineWinner || offlineTurn !== 'X') return;
+    if (!offlineGameStarted || offlineWinner) return;
     const index = x * size + y;
     if (offlineBoard[index]) return;
     const newBoard = [...offlineBoard];
-    newBoard[index] = 'X';
+    newBoard[index] = offlineTurn;
     setOfflineBoard(newBoard);
+    const nextTurn = offlineTurn === 'X' ? 'O' : 'X';
+    setOfflineHistory([...offlineHistory, {board: newBoard, turn: nextTurn}]);
     const { winner: win } = calculateWinner(newBoard, size);
     if (win) {
       setOfflineWinner(win);
-      setOfflineWins(offlineWins + 1);
+      if (win === 'X') {
+        setOfflineWins(offlineWins + 1);
+      } else {
+        setOfflineLosses(offlineLosses + 1);
+      }
     } else {
-      setOfflineTurn('O');
-      setTimeout(() => {
-        const empty = newBoard.map((cell, i) => cell === null ? i : null).filter(i => i !== null);
-        if (empty.length > 0) {
-          const rand = empty[Math.floor(Math.random() * empty.length)];
-          const oppX = Math.floor(rand / size);
-          const oppY = rand % size;
-          const oppBoard = [...newBoard];
-          oppBoard[rand] = 'O';
-          setOfflineBoard(oppBoard);
-          const { winner: oppWin } = calculateWinner(oppBoard, size);
-          if (oppWin) {
-            setOfflineWinner(oppWin);
-            setOfflineLosses(offlineLosses + 1);
-          } else {
-            setOfflineTurn('X');
-          }
-        }
-      }, 1000);
+      setOfflineTurn(nextTurn);
     }
   };
 
@@ -122,6 +112,22 @@ export default function Game() {
     setOfflineTurn('X');
     setOfflineWinner(null);
     setOfflineGameStarted(false);
+    setOfflineHistory([]);
+  };
+
+  const goToMove = (index: number) => {
+    if (index === -1) {
+      setOfflineBoard(Array(size * size).fill(null));
+      setOfflineTurn('X');
+      setOfflineWinner(null);
+      setOfflineHistory([]);
+    } else {
+      const state = offlineHistory[index];
+      setOfflineBoard(state.board);
+      setOfflineTurn(state.turn);
+      setOfflineWinner(null);
+      setOfflineHistory(offlineHistory.slice(0, index + 1));
+    }
   };
 
   // Funciones online
@@ -143,7 +149,7 @@ export default function Game() {
               setOnlineWinner(null);
               setWaiting(false);
             } else {
-              setTimeout(check, 2000);
+            setTimeout(check, 1000);
             }
           } catch (err) {
             setError('Error verificando estado de espera.');
@@ -187,27 +193,7 @@ export default function Game() {
     }
   };
 
-  const resetOnlineDevice = async () => {
-    setDeviceId(null);
-    setOnlineWins(0);
-    setOnlineLosses(0);
-    setMatchId(null);
-    setWaiting(false);
-    setOnlineBoard([]);
-    setOnlineTurn(null);
-    setOnlineWinner(null);
-    setPlayers(null);
-    setError(null);
-    try {
-      const id = await registerDevice();
-      setDeviceId(id);
-      const stats = await loadStats(id);
-      setOnlineWins(stats.wins);
-      setOnlineLosses(stats.losses);
-    } catch (err) {
-      setError('Error reseteando dispositivo.');
-    }
-  };
+
 
   const restartOnlineGame = () => {
     setMatchId(null);
@@ -234,7 +220,7 @@ export default function Game() {
     restartGame: restartOnlineGame,
     playMove: playOnlineMove,
     startMatch: startOnlineMatch,
-    resetDevice: resetOnlineDevice,
+    resetDevice: () => {},
   } : {
     board: offlineBoard,
     turn: offlineTurn,
@@ -257,29 +243,12 @@ export default function Game() {
     router.push('/');
   };
 
-  const resetDevice = () => {
-    Alert.alert(
-      'Resetear Dispositivo',
-      'Esto borrará todas las estadísticas y te desconectará. ¿Continuar?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Resetear',
-          onPress: () => {
-            if (isOnline) {
-              resetOnlineDevice();
-            }
-          },
-        },
-      ]
-    );
-  };
-
   const startOfflineGame = () => {
     setOfflineBoard(Array(size * size).fill(null));
     setOfflineTurn('X');
     setOfflineWinner(null);
     setOfflineGameStarted(true);
+    setOfflineHistory([]);
   };
 
   return (
@@ -306,11 +275,6 @@ export default function Game() {
             </Picker>
             <Text style={styles.label}>Tamaño seleccionado: {size}</Text>
             <Text style={styles.label}>Victorias: {gameLogic.wins} | Derrotas: {gameLogic.losses}</Text>
-            {isOnline && (
-              <TouchableOpacity style={styles.button} onPress={resetDevice}>
-                <Text style={styles.buttonText}>Resetear Dispositivo</Text>
-              </TouchableOpacity>
-            )}
             {isOnline && !gameLogic.matchId && !gameLogic.waiting && (
               <TouchableOpacity style={styles.button} onPress={gameLogic.startMatch}>
                 <Text style={styles.buttonText}>Buscar Partida</Text>
@@ -329,22 +293,41 @@ export default function Game() {
                 players={gameLogic.players}
               />
             )}
-            {!isOnline && !gameLogic.gameStarted && (
-              <TouchableOpacity style={styles.button} onPress={startOfflineGame}>
-                <Text style={styles.buttonText}>Iniciar Juego Offline</Text>
-              </TouchableOpacity>
+            {!isOnline && (
+              <View style={styles.offlineControls}>
+                {!gameLogic.gameStarted && (
+                  <TouchableOpacity style={styles.button} onPress={startOfflineGame}>
+                    <Text style={styles.buttonText}>Iniciar Juego Offline</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity style={styles.button} onPress={() => { setOfflineWins(0); setOfflineLosses(0); }}>
+                  <Text style={styles.buttonText}>Resetear Estadísticas</Text>
+                </TouchableOpacity>
+              </View>
             )}
             {!isOnline && gameLogic.gameStarted && (
-              <Board
-                squares={gameLogic.board}
-                onPlay={gameLogic.playMove}
-                size={size}
-                onRestart={gameLogic.restartGame}
-                winner={gameLogic.winner}
-                turn={gameLogic.turn}
-                deviceId={null}
-                players={null}
-              />
+              <View>
+                <Board
+                  squares={gameLogic.board}
+                  onPlay={gameLogic.playMove}
+                  size={size}
+                  onRestart={gameLogic.restartGame}
+                  winner={gameLogic.winner}
+                  turn={gameLogic.turn}
+                  deviceId={null}
+                  players={null}
+                />
+                <ScrollView horizontal style={styles.movesContainer}>
+                  <TouchableOpacity style={styles.moveButton} onPress={() => goToMove(-1)}>
+                    <Text style={styles.moveButtonText}>Inicio</Text>
+                  </TouchableOpacity>
+                  {offlineHistory.map((_, index) => (
+                    <TouchableOpacity key={index} style={styles.moveButton} onPress={() => goToMove(index)}>
+                      <Text style={styles.moveButtonText}>Mov {index + 1}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
             )}
           </View>
         </View>
@@ -386,11 +369,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
   },
-  gameInfo: {
-    flex: 1,
-    maxHeight: 200,
-    marginTop: 20,
-  },
   label: {
     fontSize: 16,
     marginVertical: 5,
@@ -417,10 +395,25 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginVertical: 20,
   },
-  movesTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 10,
-    textAlign: 'center',
+  offlineControls: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    marginVertical: 10,
+  },
+  movesContainer: {
+    marginTop: 10,
+    paddingHorizontal: 10,
+  },
+  moveButton: {
+    backgroundColor: '#28a745',
+    padding: 8,
+    borderRadius: 5,
+    marginHorizontal: 5,
+    alignItems: 'center',
+  },
+  moveButtonText: {
+    color: 'white',
+    fontSize: 14,
   },
 });

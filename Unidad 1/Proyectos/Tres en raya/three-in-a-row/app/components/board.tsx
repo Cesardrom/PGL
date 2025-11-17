@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, useColorScheme, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, useColorScheme, TouchableOpacity, Alert } from 'react-native';
 import Square from './square';
 import { Colors } from '../../constants/theme';
 
@@ -17,7 +17,11 @@ interface BoardProps {
 function Board({ squares, onPlay, size = 3, onRestart, winner, turn, deviceId, players }: BoardProps) {
 
   function handleClick(i: number) {
-    if (winner || squares[i] || turn !== deviceId) {
+    if (winner || squares[i]) {
+      return;
+    }
+    if (deviceId && turn !== deviceId) {
+      Alert.alert('No es tu turno', 'Espera a que sea tu turno para jugar.');
       return;
     }
     const x = Math.floor(i / size);
@@ -25,7 +29,7 @@ function Board({ squares, onPlay, size = 3, onRestart, winner, turn, deviceId, p
     onPlay(x, y);
   }
 
-  const status = winner ? `Ganador: ${winner}` : turn === deviceId ? 'Tu turno' : 'Turno del oponente';
+  const status = winner ? `Ganador: ${winner}` : deviceId ? (turn === deviceId ? 'Tu turno' : 'Turno del oponente') : (turn === 'X' ? 'Turno de X' : 'Turno de O');
 
   return (
     <View style={styles.container}>

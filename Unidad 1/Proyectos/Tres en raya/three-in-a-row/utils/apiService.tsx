@@ -1,6 +1,10 @@
 import axios from 'axios';
+import { Platform } from 'react-native';
 
-const API_BASE = 'http://127.0.0.1:5000/'; // For Android emulator, use 10.0.2.2 instead of localhost
+const API_BASE = Platform.select({
+  android: 'http://10.0.2.2:5000/',
+  web: 'http://localhost:5000/',
+});
 
 // Registrar dispositivo en el servidor
 export const registerDevice = async () => {
