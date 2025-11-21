@@ -1,0 +1,114 @@
+Descripción.
+
+Demuestra tu capacidad para comunicarte con los endpoints, enviar y recibir JSON válidos, manejar autenticación y gestionar grupos y gastos.
+
+1. Verificación de contraseña
+
+Crea una contraseña segura con:
+
+* Al menos una mayúscula
+* Al menos una minúscula
+* Al menos un número
+* Al menos un símbolo (ej. !, #, $, %, &, ?)
+* Mínimo 8 caracteres
+
+2. Registro e inicio de sesión
+Usando los endpoints del módulo auth:
+
+* Registra un usuario (POST /auth/register) con tu nombre de usuario y contraseña verificada.
+* Inicia sesión (POST /auth/login) y comprueba la respuesta de autenticación.
+
+3. Gestión de grupos
+
+Una vez autenticado, crea los componentes para
+
+* Crear un grupo con su nombre.
+* Muestra tus grupos.
+
+
+4. Gestión de gastos
+
+Con un grupo existente:
+
+* Añade un gasto.
+* Modifica un gasto, cambia cantidad o descripción
+* Permite eliminar un gasto.
+
+
+Password1!
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+**Auth**
+import * as SecureStore from "expo-secure-store";
+import Constants from "expo-constants";
+import React, { createContext, useEffect, useMemo, useState } from "react";
+
+const API_URL = Constants.expoConfig?.extra?.apiUrl ?? "";
+const TOKEN_KEY = Constants.expoConfig?.extra?.tokenKey ?? "";
+
+type AuthContextType = {
+  token: string | null;
+  loading: boolean;
+  login: (username: string, password: string) => Promise<any>;
+  register: (username: string, password: string) => Promise<any>;
+  logout: () => Promise<void>;
+};
+
+export const AuthContext = createContext<AuthContextType>({
+  token: null,
+  loading: true,
+  login: async () => ({}),
+  register: async () => ({}),
+  logout: async () => {},
+});
+
+export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+  const [token, setToken] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadToken = async () => {
+      const saved = await SecureStore.getItemAsync(TOKEN_KEY);
+      if (saved) setToken(saved);
+      setLoading(false);
+    };
+    loadToken();
+  }, []);
+}
+
+**login**
+
+import { useRouter } from "expo-router";
+import React, { useContext, useState } from "react";
+import { Button, Text, TextInput, View } from "react-native";
+import { AuthContext } from "../context/AuthContext";
+
+export default function Login() {
+  const { login, token } = useContext(AuthContext);
+  const router = useRouter();
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+
+  const handleLogin = async () => {
+    const res = await login(username, password);
+    if (res.access_token) {
+      router.replace("/");
+    } else {
+      setError(res.msg || "Login fallido");
+    }
+  };
+}
